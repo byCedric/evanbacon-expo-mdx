@@ -1,22 +1,17 @@
-import mdx from "@mdx-js/mdx";
-import { Processor } from "unified";
-import { Parent } from "unist";
-import visit from "unist-util-visit";
+import { Parent } from 'unist';
+import visit from 'unist-util-visit';
 
-const debug = require("debug")("bacons:mdx:transform") as typeof console.log;
+const debug = require('debug')('bacons:mdx:transform') as typeof console.log;
 
-const getTemplate = (rawMdxString) => {
-  const replacedShortcodes = rawMdxString.replace(
-    /= makeShortcode\(/g,
-    "= makeExpoMetroProvided("
-  );
+const getTemplate = rawMdxString => {
+  const replacedShortcodes = rawMdxString.replace(/= makeShortcode\(/g, '= makeExpoMetroProvided(');
 
   return `"use client";
 import { useMDXComponents } from "@bacons/mdx";
 ${makeExpoMetroProvidedTemplate}
 ${replacedShortcodes.replace(
-  "return <MDXLayout",
-  "const html = { ...useMDXComponents(), ...(components ?? {}) };\n  const MDXLayout = html.Wrapper;\n  return <MDXLayout"
+  'return <MDXLayout',
+  'const html = { ...useMDXComponents(), ...(components ?? {}) };\n  const MDXLayout = html.Wrapper;\n  return <MDXLayout'
 )}`;
 };
 
@@ -34,8 +29,8 @@ function isParent(node: any): node is Parent {
 }
 
 export function createTransformer({
-  matchFile = (props) => !!props.filename.match(/\.mdx?$/),
-  matchLocalAsset = (props) => !!props.src.match(/^[.@]/),
+  matchFile = props => !!props.filename.match(/\.mdx?$/),
+  matchLocalAsset = props => !!props.src.match(/^[.@]/),
   remarkPlugins = [],
 }: {
   /**
@@ -52,78 +47,81 @@ export function createTransformer({
 
   remarkPlugins?: any[];
 } = {}) {
-  const compiler = mdx.createCompiler({ remarkPlugins }) as Processor;
+  let compiler: ReturnType<typeof import('@mdx-js/mdx').createProcessor> | null = null;
 
-  // Append this final rule at the end of the compiler chain:
-  compiler.use(() => {
-    return (tree, _file) => {
-      if (isParent(tree)) {
-        // Pass components={html} to custom components:
-        visit(tree, "jsx", (node) => {
-          if (
-            !("value" in node) ||
-            !node.value ||
-            typeof node.value !== "string"
-          ) {
-            return;
-          }
-          if (node.value.match(/<([A-Z][\w.]+)/)) {
-            node.value = node.value.replace(
-              /<([A-Z][\w.]+)/,
-              `<$1 __components={html} `
-            );
-          }
-        });
-      }
+  async function getOrCreateMdxCompiler() {
+    if (!compiler) {
+      const mdx = await import('@mdx-js/mdx');
+      compiler = mdx.createProcessor({ remarkPlugins });
 
-      if (isParent(tree)) {
-        const walkForImages = (node: any) => {
-          if (node.tagName === "img") {
-            if (matchLocalAsset(node.properties)) {
-              // Relative path should be turned into a require statement:
-              node.properties.src = `[[_Expo_MemberProperty:require("${node.properties.src}")]]`;
-              // delete node.properties.src;
-            }
+      // Append this final rule at the end of the compiler chain:
+      compiler.use(() => {
+        return (tree, _file) => {
+          if (isParent(tree)) {
+            // Pass components={html} to custom components:
+            // @ts-expect-error
+            visit(tree, 'jsx', node => {
+              if (!('value' in node) || !node.value || typeof node.value !== 'string') {
+                return;
+              }
+              if (node.value.match(/<([A-Z][\w.]+)/)) {
+                node.value = node.value.replace(/<([A-Z][\w.]+)/, `<$1 __components={html} `);
+              }
+            });
           }
-          if (isParent(node)) {
-            node.children.forEach(walkForImages);
+
+          if (isParent(tree)) {
+            const walkForImages = (node: any) => {
+              if (node.tagName === 'img') {
+                if (matchLocalAsset(node.properties)) {
+                  // Relative path should be turned into a require statement:
+                  node.properties.src = `[[_Expo_MemberProperty:require("${node.properties.src}")]]`;
+                  // delete node.properties.src;
+                }
+              }
+              if (isParent(node)) {
+                node.children.forEach(walkForImages);
+              }
+            };
+
+            tree.children.map(walkForImages);
           }
+
+          // @ts-expect-error
+          visit(tree as any, 'element', node => {
+            // Ensure we don't use react-dom elements
+            node.tagName = 'html.' + node.tagName;
+          });
         };
-
-        tree.children.map(walkForImages);
-      }
-
-      visit(tree, "element", (node) => {
-        // Ensure we don't use react-dom elements
-        // @ts-expect-error: incorrect types
-        node.tagName = "html." + node.tagName;
       });
-    };
-  });
+    }
+
+    return compiler;
+  }
 
   async function transformMdx(props: { filename: string; src: string }) {
     if (!matchFile(props)) {
       return props;
     }
 
-    let { contents } = await compiler.process({
-      contents: props.src,
+    const compiler = await getOrCreateMdxCompiler();
+    let { value: contents } = await compiler.process({
+      value: props.src,
       path: props.filename,
     });
 
-    if (typeof contents === "string") {
+    if (typeof contents === 'string') {
       // Support member expressions in require statements:
-      contents = contents.replace(
-        /"\[\[_Expo_MemberProperty:(.*)\]\]"/g,
-        (match, p1) => {
-          return p1.replace(/\\\\/g, "\\").replace(/\\"/g, '"');
-        }
-      );
+      contents = contents.replace(/"\[\[_Expo_MemberProperty:(.*)\]\]"/g, (match, p1) => {
+        return p1.replace(/\\\\/g, '\\').replace(/\\"/g, '"');
+      });
     }
+
+    console.log(contents);
 
     props.src = getTemplate(contents);
 
-    debug("Compiled MDX file:", props.filename, "\n", props.src);
+    debug('Compiled MDX file:', props.filename, '\n', props.src);
 
     return props;
   }

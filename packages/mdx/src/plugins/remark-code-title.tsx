@@ -1,4 +1,4 @@
-import visit from "unist-util-visit";
+import { visit } from "unist-util-visit";
 
 /**
  * This simple plugin appends the code block meta to the node value.
