@@ -10,6 +10,7 @@
   "dependencies": {
     "@bacons/mdx": "*",
     "@expo/metro-runtime": "~4.0.0",
+    "estree-util-visit": "^2.0.0",
     "expo": "~52.0.25",
     "expo-linking": "^7.0.4",
     "expo-router": "~4.0.16",
@@ -23,7 +24,8 @@
     "react-native-web": "~0.19.10"
   },
   "devDependencies": {
-    "@babel/core": "^7.24.0"
+    "@babel/core": "^7.24.0",
+    "expo-atlas": "^0.4.0"
   },
   "private": true
 }

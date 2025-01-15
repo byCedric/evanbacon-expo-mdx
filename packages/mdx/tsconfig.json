@@ -8,6 +8,6 @@
     "declarationMap": false,
     "emitDeclarationOnly": true
   },
-  "include": ["./src"],
+  "include": ["./src", "./types"],
   "exclude": ["**/__mocks__/*", "**/__tests__/*"]
 }

@@ -226,10 +226,17 @@ console.log("hello")
   });
 
   it(`should transform frontmatter`, async () => {
+    // Load all ESM modules in CJS contexts
+    const [remarkStringify, remarkFrontmatter, remarkMdxFrontmatter] = await Promise.all([
+      import('remark-stringify').then((module) => module.default),
+      import('remark-frontmatter').then((module) => module.default),
+      import('remark-mdx-frontmatter').then((module) => module.default),
+    ])
+
     const { transform } = createTransformer({
       remarkPlugins: [
-        require("remark-stringify"),
-        [require("remark-frontmatter"), ["yaml"]],
+        remarkStringify,
+        [remarkFrontmatter, ["yaml"]],
         () => (tree) => {
           console.log(tree);
         },
@@ -256,7 +263,7 @@ console.log("hello")
         //   }
         // }
         [
-          require("remark-mdx-frontmatter").remarkMdxFrontmatter,
+          remarkMdxFrontmatter,
           { name: "meta" },
         ],
       ],
